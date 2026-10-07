@@ -6,6 +6,8 @@ const schema = a.schema({
     .model({
       content: a.string(),
       isDone: a.boolean(),
+      fileKey: a.string(),
+      fileName: a.string(),
     })
     .authorization((allow) => [allow.owner()]),
 

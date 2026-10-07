@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Authenticator } from '@aws-amplify/ui-react';
 import { generateClient } from 'aws-amplify/data';
+import { uploadData, getUrl, remove } from 'aws-amplify/storage';
 import './App.css';
 
 const client = generateClient({ authMode: 'userPool' });
@@ -12,6 +13,8 @@ function formatTime(iso) {
 function TodoItem({ todo }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(todo.content);
+  const [uploading, setUploading] = useState(false);
+  const fileInput = useRef(null);
 
   async function save() {
     const value = text.trim();
@@ -24,6 +27,44 @@ function TodoItem({ todo }) {
   function cancel() {
     setText(todo.content);
     setEditing(false);
+  }
+
+  async function attachFile(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      if (todo.fileKey) await remove({ path: todo.fileKey });
+      const result = await uploadData({
+        path: ({ identityId }) =>
+          `todo-files/${identityId}/${todo.id}-${file.name}`,
+        data: file,
+      }).result;
+      await client.models.Todo.update({
+        id: todo.id,
+        fileKey: result.path,
+        fileName: file.name,
+      });
+    } catch (err) {
+      alert('Upload failed: ' + err.message);
+    }
+    setUploading(false);
+    e.target.value = '';
+  }
+
+  async function openFile() {
+    const { url } = await getUrl({ path: todo.fileKey });
+    window.open(url.toString(), '_blank');
+  }
+
+  async function removeFile() {
+    await remove({ path: todo.fileKey });
+    await client.models.Todo.update({ id: todo.id, fileKey: null, fileName: null });
+  }
+
+  async function deleteTodo() {
+    if (todo.fileKey) await remove({ path: todo.fileKey });
+    await client.models.Todo.delete({ id: todo.id });
   }
 
   const edited = todo.updatedAt !== todo.createdAt;
@@ -53,6 +94,18 @@ function TodoItem({ todo }) {
         ) : (
           <span className="todo-text">{todo.content}</span>
         )}
+
+        {todo.fileKey && (
+          <span className="file-chip">
+            <button className="file-link" onClick={openFile}>
+              📎 {todo.fileName}
+            </button>
+            <button className="file-remove" onClick={removeFile} title="Remove file">
+              ✕
+            </button>
+          </span>
+        )}
+
         <small className="todo-time">
           {edited ? 'Edited ' : 'Added '}
           {formatTime(todo.updatedAt)}
@@ -60,6 +113,21 @@ function TodoItem({ todo }) {
       </div>
 
       <div className="todo-actions">
+        <input
+          type="file"
+          ref={fileInput}
+          onChange={attachFile}
+          style={{ display: 'none' }}
+        />
+        <button
+          className="btn small ghost"
+          onClick={() => fileInput.current.click()}
+          disabled={uploading}
+          title="Attach file"
+        >
+          {uploading ? '...' : '📎'}
+        </button>
+
         {editing ? (
           <>
             <button className="btn small" onClick={save}>Save</button>
@@ -76,10 +144,7 @@ function TodoItem({ todo }) {
             Edit
           </button>
         )}
-        <button
-          className="btn small danger"
-          onClick={() => client.models.Todo.delete({ id: todo.id })}
-        >
+        <button className="btn small danger" onClick={deleteTodo}>
           Delete
         </button>
       </div>
