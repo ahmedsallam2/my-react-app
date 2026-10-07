@@ -147,6 +147,27 @@ function TodoList() {
   );
 }
 
+function LambdaGreeting({ name }) {
+  const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  async function callLambda() {
+    setLoading(true);
+    const { data, errors } = await client.queries.sayHello({ name });
+    setMessage(errors ? errors[0].message : data);
+    setLoading(false);
+  }
+
+  return (
+    <div className="lambda-box">
+      <button className="btn small" onClick={callLambda} disabled={loading}>
+        {loading ? 'Calling Lambda...' : '⚡ Ask Lambda'}
+      </button>
+      {message && <p className="lambda-msg">{message}</p>}
+    </div>
+  );
+}
+
 export default function App() {
   return (
     <div className="page">
@@ -160,6 +181,7 @@ export default function App() {
               </div>
               <button className="btn ghost" onClick={signOut}>Sign out</button>
             </header>
+            <LambdaGreeting name={user?.signInDetails?.loginId} />
             <TodoList />
           </main>
         )}
